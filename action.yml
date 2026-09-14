@@ -1,4 +1,4 @@
-name: 'Broken Link Check'
+name: 'Broken Link Checker'
 description: 'Checks links with lychee and reports a full per-status, per-file breakdown, excluding ESOUI/UESP.'
 author: 'MPHONlC'
 branding:
