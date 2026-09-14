@@ -1,0 +1,74 @@
+name: 'Broken Link Check'
+description: 'Checks links with lychee and reports a full per-status, per-file breakdown, excluding ESOUI/UESP.'
+author: 'MPHONlC'
+branding:
+  icon: 'link'
+  color: 'blue'
+
+inputs:
+  files:
+    description: 'Space-separated list of files to check'
+    required: false
+    default: 'README.md README_BBCODE.txt README_COMMONMARK.txt CHANGELOG_GFM.txt'
+  exclude:
+    description: 'Regex of URLs to exclude from checking - default skips esoui.com and uesp.net, which reject automated requests with a 403'
+    required: false
+    default: 'https://(www\.esoui\.com|([a-z0-9-]+\.)?uesp\.net)'
+  github_token:
+    description: 'GitHub token to raise the rate limit on github.com links - leave blank to skip'
+    required: false
+    default: ''
+  fail:
+    description: 'Whether to fail the run on a real error or timeout (excluded/redirected links never fail the run)'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Verify input files exist
+      shell: bash
+      run: |
+        MISSING=()
+        for f in ${{ inputs.files }}; do
+          if [ ! -f "$f" ]; then
+            MISSING+=("$f")
+          fi
+        done
+        if [ ${#MISSING[@]} -gt 0 ]; then
+          {
+            echo "## Broken Link Check"
+            echo ""
+            echo "**Could not run: the following input file(s) do not exist in this checkout:**"
+            echo ""
+            for f in "${MISSING[@]}"; do
+              echo "- $f"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          for f in "${MISSING[@]}"; do
+            echo "::error::Broken Link Check: input file not found: $f"
+          done
+          exit 1
+        fi
+
+    - name: Check links (lychee)
+      uses: lycheeverse/lychee-action@v2
+      with:
+        args: >
+          --no-progress
+          --verbose
+          --exclude '${{ inputs.exclude }}'
+          ${{ inputs.files }}
+        format: json
+        output: ./lychee-report.json
+        token: ${{ inputs.github_token }}
+        jobSummary: false
+        fail: false
+
+    - name: Build link check summary
+      shell: bash
+      run: |
+        python3 "${{ github.action_path }}/summarize_links.py" \
+          --report ./lychee-report.json \
+          --files ${{ inputs.files }} \
+          --fail-on-error "${{ inputs.fail }}"
